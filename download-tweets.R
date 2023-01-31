@@ -16,7 +16,8 @@ library(stringr)
 get_all_tweets(
   query = c("energiewende"),
   start_tweets = "2021-02-24T00:00:00Z",
-  end_tweets = "2022-06-01T00:00:00Z",
+  #end_tweets = "2022-06-01T00:00:00Z",
+  end_tweets = "2022-03-25T00:00:00Z",
   is_retweet = FALSE,
   remove_promoted = TRUE,
   data_path = "data_full/",

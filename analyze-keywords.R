@@ -16,7 +16,7 @@ tweets <- readRDS("./tweets.rds")
 hashtags <- tweets %>% 
   select(tweet_id, date, text) %>% 
   unnest_tokens(output = token, input = text, token = "tweets") %>% 
-  filter(str_detect(token, "^#")) |> 
+  filter(str_detect(token, "^#"), token != "#energiewende") |> 
   count(tweet_id, date, token)
 
 # Create vector to group tweets as pre-/post 24.2.22
@@ -44,40 +44,99 @@ hashtag_stats <- hashtags |>
 # Save results as Excel spreadsheet
 write.xlsx(hashtag_stats, "results/hashtag-stats.xlsx")
 
+# Save results as R data file
+saveRDS(hashtag_stats, './hashtag_stats.rds')
+
 
 #######################################################
 ### Visualize frequency change of selected hashtags ###
 #######################################################
 
+library(tidyverse)
+library(ggtext)
+library(showtext)
+
+# Load saved results
+hashtag_stats <- readRDS('./hashtag_stats.rds')
+
+# Load font
+
+
 # Load manually curated list of hashtags (incl. translation) for visualization
 hashtags_of_interest <- read_csv("hashtags-of-interest.csv")
 
-# Create plot
-plot <- hashtag_stats |>
+# Filter and reformat plot
+hashtag_plot_data <- hashtag_stats |> 
   filter(feature %in% hashtags_of_interest$hashtag) |> 
-  ggplot(aes(x = f_change * 100, y = fct_reorder(feature, f_change))) +
-  geom_col(fill = "deepskyblue4", width = 0.5) +
-  scale_y_discrete(labels = paste0(hashtags_of_interest$hashtag, "\n(", hashtags_of_interest$translation, ") ")) +
-  xlab(
-    label = expression("Change in frequency per 100 words (p < 0.01)")
+  pivot_longer(cols = c(f_target, f_reference), names_to = 'corpus', values_to = 'frequency') |> 
+  mutate(before_war = corpus == 'f_reference') |> 
+  select(hashtag = feature, n_postwar = n_target, frequency, before_war) |> 
+  right_join(hashtags_of_interest, by = 'hashtag') |> 
+  mutate(hashtag = fct_reorder(hashtag, n_postwar),
+         translation = fct_reorder(translation, n_postwar))
+
+# Prepare plot labels
+y_hashtag_labels <- paste0(
+  levels(hashtag_plot_data$hashtag), 
+  '<br>**', 
+  levels(hashtag_plot_data$translation), 
+  '**')
+
+plot_title <- '**Frequent hashtags in Tweets about the *Energiewende*<br>since the beginning of the war (24.2.-23.3.2022)**'
+plot_description <- "Beschreibung der Grafik"
+legend_labels <- c('Frequency before the war', 'Frequency increase since the war')
+
+plot <- hashtag_plot_data |>
+  
+  # Data mapping 
+  ggplot(aes(x = frequency*100, y = hashtag, fill = before_war)) +
+  geom_col(width = 0.4, position = 'identity') +
+  
+  # Axes
+  #scale_y_discrete() +
+  scale_y_discrete(labels = y_hashtag_labels) +
+  scale_x_continuous(expand = c(.02,0)) +
+  
+  # Fill color
+  scale_fill_manual(
+    breaks = c(TRUE, FALSE),
+    labels = legend_labels, 
+    values = c('#A2AADB','#5564C2'), 
+    guide = guide_legend(title = NULL)) +
+  
+  # Title, caption and description
+  labs(
+    title = plot_title,
+    caption = plot_description,
+    x = "Hashtag frequency in percent",
+    y = NULL
   ) +
-  ylab(label = NULL) +
-  ggtitle(
-    "Frequency change of selected hashtags co-occuring with 'energiewende'",
-    subtitle = "comparing tweets from 24.2.21-23.2.22 and 24.2.-30.5.22"
-    ) +
+  
+  # Format plot
   theme_bw() +
   theme(
-    axis.text=element_text(size=11),
-    legend.position = "None",
+    plot.title = element_markdown(size=17, lineheight = 1.2),
+    plot.caption = element_markdown(size=11, lineheight = 1.1),
+    axis.text.y = element_markdown(size=11, lineheight = 1.1),
+    axis.title.x = element_markdown(size=11, lineheight = 1.1),
+    
+    # Format legend
+    legend.text = element_markdown(size=11, lineheight = 1.1),
+    legend.title = element_markdown(size=11, lineheight = 1.1),
+    
+    legend.position = c(0.72,0.1),
+    
+    # Remove grid
     panel.grid.major.x = element_blank(),
-    panel.grid.minor.x = element_blank()
-    )
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.y = element_blank()
+  )
+
 
 # Preview plot
 plot
 
 # Save plot to file
-ggsave("results/hashtag-frequency-change.jpg", plot, width = 2400, height = 2900, units = "px")  
+ggsave("results/hashtag-frequency-change.jpg", plot, width = 2500, height = 2900, units = "px")  
 
 
